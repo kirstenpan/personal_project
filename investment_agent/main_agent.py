@@ -3,7 +3,6 @@ import requests
 import yfinance as yf
 import feedparser
 from datetime import datetime
-from google import genai
 
 # =========================
 # ENV CONFIG
@@ -83,8 +82,8 @@ Timestamp: {now}
 LIVE MARKET DATA:
 {market_data}
 
-RECENT X (TWITTER) SIGNALS:
-{tweets}
+RECENT X SIGNALS:
+{x}
 
 Analyze with institutional rigor.
 
