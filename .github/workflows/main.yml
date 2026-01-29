@@ -1,23 +1,47 @@
 name: Financial_Agent_247
+
 on:
   schedule:
-    - cron: '0 * * * *'  # Triggered at the start of every hour
+    - cron: '0 * * * *'
   workflow_dispatch:
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
       - name: Install dependencies
-        run: pip install -r investment_agent/requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r investment_agent/requirements.txt
+
+      - name: Environment sanity check
+        run: |
+          echo "Checking environment variables..."
+          [ -z "$WHATSAPP_TOKEN" ] && echo "WHATSAPP_TOKEN missing" || echo "WHATSAPP_TOKEN OK"
+          [ -z "$PHONE_NUMBER_ID" ] && echo "PHONE_NUMBER_ID missing" || echo "PHONE_NUMBER_ID OK"
+          [ -z "$RECIPIENT_NUMBER" ] && echo "RECIPIENT_NUMBER missing" || echo "RECIPIENT_NUMBER OK"
+          [ -z "$GEMINI_API_KEY" ] && echo "GEMINI_API_KEY missing" || echo "GEMINI_API_KEY OK"
+        env:
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          PHONE_NUMBER_ID: ${{ secrets.PHONE_NUMBER_ID }}
+          RECIPIENT_NUMBER: ${{ secrets.RECIPIENT_NUMBER }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
       - name: Run Gemini Agent
         env:
           WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
           PHONE_NUMBER_ID: ${{ secrets.PHONE_NUMBER_ID }}
           RECIPIENT_NUMBER: ${{ secrets.RECIPIENT_NUMBER }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python investment_agent/main_agent.py
+          PYTHONUNBUFFERED: 1
+        run: |
+          python -u investment_agent/main_agent.py
