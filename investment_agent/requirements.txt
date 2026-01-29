@@ -4,4 +4,3 @@ python-telegram-bot
 beautifulsoup4
 requests
 yfinance
-lxml
