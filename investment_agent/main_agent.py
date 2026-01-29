@@ -1,9 +1,9 @@
 import os
 import requests
-import google.generativeai as genai
 import yfinance as yf
-import snscrape.modules.twitter as sntwitter
+import feedparser
 from datetime import datetime
+from google import genai
 
 # =========================
 # ENV CONFIG
@@ -16,8 +16,7 @@ RECIPIENT_NUMBER = os.getenv("RECIPIENT_NUMBER")
 if not all([GEMINI_API_KEY, WHATSAPP_TOKEN, PHONE_NUMBER_ID, RECIPIENT_NUMBER]):
     raise RuntimeError("Missing required environment variables")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 WHATSAPP_LIMIT = 3900
 
@@ -52,32 +51,28 @@ def fetch_market_data():
     return snapshot
 
 # =========================
-# X (TWITTER) SCRAPING
+# NEWS / SENTIMENT (RSS)
 # =========================
-def fetch_x_sentiment():
-    queries = [
-        "silver market",
-        "COMEX silver",
-        "UAMY stock",
-        "AG silver stock",
-        "EXK mining",
-        "Federal Reserve independence"
+def fetch_market_news():
+    feeds = [
+        "https://feeds.reuters.com/reuters/commoditiesNews",
+        "https://feeds.reuters.com/reuters/businessNews",
+        "https://www.mining.com/feed/"
     ]
 
-    tweets = []
+    headlines = []
 
-    for q in queries:
-        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(q).get_items()):
-            if i >= 3:
-                break
-            tweets.append(f"{tweet.date.date()} | {q} | {tweet.content}")
+    for url in feeds:
+        feed = feedparser.parse(url)
+        for entry in feed.entries[:3]:
+            headlines.append(f"{entry.title} ({entry.link})")
 
-    return tweets
+    return headlines
 
 # =========================
 # PROMPT BUILDER
 # =========================
-def build_prompt(market_data, tweets):
+def build_prompt(market_data, news):
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""
@@ -135,26 +130,24 @@ def send_whatsapp(message):
 def run_agent():
     try:
         market_data = fetch_market_data()
-        tweets = fetch_x_sentiment()
+        news = fetch_market_news()
 
-        print("Market data fetched")
-        print("Tweets fetched:", len(tweets))
+        prompt = build_prompt(market_data, news)
 
-        prompt = build_prompt(market_data, tweets)
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
 
-        if not response or not response.text:
-            raise RuntimeError("Gemini returned empty response")
+        text = response.text.strip()
 
-        msg = response.text.strip()
+        if len(text) > WHATSAPP_LIMIT:
+            text = text[:3800] + "\n\n[Truncated]"
 
-        if len(msg) > WHATSAPP_LIMIT:
-            msg = msg[:3800] + "\n\n[Truncated]"
-
-        send_whatsapp(msg)
+        send_whatsapp(text)
 
     except Exception as e:
-        print("AGENT FAILURE:", str(e))
+        send_whatsapp(f"Agent error: {str(e)}")
 
 # =========================
 # ENTRYPOINT
