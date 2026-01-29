@@ -93,7 +93,7 @@ RECENT X (TWITTER) SIGNALS:
 
 Analyze with institutional rigor.
 
-Focus on:
+gather all the useful information through research for me, including X.com, yfinance, etc. Focus on:
 - Momentum, trend strength, stock price analysis, reason, and inflection risk
 - Miner vs silver divergence or confirmation
 - Volume confirmation or exhaustion
