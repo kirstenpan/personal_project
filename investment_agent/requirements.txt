@@ -1,4 +1,3 @@
 requests
-google-genai
+google-generativeai
 yfinance
-feedparser
