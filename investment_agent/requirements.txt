@@ -1,2 +1,7 @@
+google-genai
+schedule
+python-telegram-bot
+beautifulsoup4
 requests
-google-generativeai
+yfinance
+lxml
