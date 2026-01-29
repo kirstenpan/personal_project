@@ -1,2 +1,3 @@
-requests 
+requests
 google-generativeai
+yfinance
