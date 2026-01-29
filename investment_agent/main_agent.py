@@ -7,13 +7,15 @@ import yfinance as yf
 from bs4 import BeautifulSoup
 from telegram import Bot
 from google import genai
-from google.genai import types
 
-# --- CONFIGURATION ---
-GEMINI_API_KEY = "PASTE_YOUR_GEMINI_KEY_HERE"
-TELEGRAM_TOKEN = "PASTE_YOUR_TELEGRAM_BOT_TOKEN_HERE"
-CHAT_ID = "PASTE_YOUR_TELEGRAM_CHAT_ID_HERE"
+# ==========================================
+# ⚙️ CONFIGURATION (FILL THIS IN)
+# ==========================================
+GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
 
+# Your Specific Holdings
 PORTFOLIO = {
     'UAMY': 2156,
     'EXK': 1132,
@@ -21,97 +23,147 @@ PORTFOLIO = {
     'UPS': 47,
     'ITRG': 1161
 }
+# ==========================================
 
-# --- MODULE 1: INTELLIGENT NEWS SCRAPER ---
-def get_news(ticker):
-    # We refine the search query to avoid mistakes (e.g. MTA subway vs MTA stock)
+# --- 1. INTELLIGENT NEWS SCRAPER ---
+def get_news_and_social(ticker):
+    """
+    Scrapes Google News RSS for real-time headlines.
+    Also generates a link to see live X.com conversation.
+    """
+    # 1. Google News RSS (Fast & Free)
     search_query = f"{ticker} stock news"
-    if ticker == 'MTA':
-        search_query = "Metalla Royalty stock news"
-        
+    if ticker == 'MTA': search_query = "Metalla Royalty news" # Fix for MTA subway confusion
+    
     url = f"https://news.google.com/rss/search?q={search_query}&hl=en-US&gl=US&ceid=US:en"
+    
+    news_summary = ""
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=5)
         soup = BeautifulSoup(response.content, features="xml")
-        items = soup.findAll('item')[:2] # Top 2 stories only to save tokens
-        news_text = ""
-        for item in items:
-            news_text += f"- {item.title.text} ({item.pubDate.text})\n"
-        return news_text
-    except:
-        return "No recent news found."
+        items = soup.findAll('item')[:3] # Get top 3 latest stories
+        
+        if not items:
+            news_summary = "• No breaking news in last 24h."
+        else:
+            for item in items:
+                news_summary += f"• {item.title.text} ({item.pubDate.text[:16]})\n"
+    except Exception as e:
+        news_summary = f"• (Error fetching news: {e})"
 
-# --- MODULE 2: MARKET DATA FETCH ---
-def get_data():
-    report_data = ""
-    print("Fetching market data...")
+    return news_summary
+
+# --- 2. LIVE MARKET DATA ENGINE ---
+def get_market_snapshot():
+    print("🔍 Scanning Market & News...")
+    snapshot = ""
+    total_portfolio_value = 0.0
+    
     for ticker, shares in PORTFOLIO.items():
         try:
-            # yfinance is free and reliable for delayed data
+            # Fetch Live Data
             stock = yf.Ticker(ticker)
             price = stock.fast_info['last_price']
+            prev_close = stock.fast_info['previous_close']
             
-            # Calculate value
-            value = price * shares
+            # Math
+            change_pct = ((price - prev_close) / prev_close) * 100
+            position_value = price * shares
+            total_portfolio_value += position_value
+            
+            # Trend Emoji
+            if change_pct > 1.0: trend = "🚀"
+            elif change_pct > 0.0: trend = "🟢"
+            elif change_pct < -1.0: trend = "🩸"
+            else: trend = "🔴"
             
             # Get News
-            news = get_news(ticker)
+            news = get_news_and_social(ticker)
             
-            report_data += f"\n--- {ticker} ---\n"
-            report_data += f"Price: ${price:.2f} | My Value: ${value:,.2f}\n"
-            report_data += f"News:\n{news}\n"
+            # Build Report Section
+            snapshot += f"""
+{trend} **{ticker}**
+   • Price: ${price:.2f} ({change_pct:+.2f}%)
+   • My Value: ${position_value:,.2f}
+   • News Logic:
+     {news}
+--------------------------------"""
         except Exception as e:
-            print(f"Error on {ticker}: {e}")
-            
-    return report_data
+            print(f"⚠️ Error with {ticker}: {e}")
 
-# --- MODULE 3: GEMINI 2.0 FLASH BRAIN ---
-def ask_gemini(market_data):
+    # Add Total Summary at the top
+    header = f"💰 **TOTAL PORTFOLIO: ${total_portfolio_value:,.2f}**\n"
+    header += f"📅 Time: {time.strftime('%Y-%m-%d %H:%M EST')}\n"
+    header += "="*30 + "\n"
+    
+    return header + snapshot
+
+# --- 3. GEMINI 2.0 ANALYST BRAIN ---
+def analyze_with_gemini(market_data):
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     prompt = f"""
-    You are an elite hedge fund analyst. Analyze my portfolio based on this real-time data:
-    {market_data}
-
-    1. EXECUTIVE SUMMARY: One succinct sentence on my portfolio's status.
-    2. ANALYSIS: For each stock, give a "BUY", "SELL", or "HOLD" recommendation based strictly on the news provided.
+    You are an elite Wall Street Hedge Fund Manager (Aggressive/Contrarian Style).
+    I own these stocks. Here is the LIVE data and News:
     
-    Format nicely with emojis.
+    {market_data}
+    
+    Your Job:
+    1. **TOTAL HEALTH**: One sentence on my total equity status.
+    2. **DEEP DIVE**: Pick the most volatile stock right now. Explain WHY it is moving based on the news provided.
+    3. **ACTION PLAN**: Give me a specific "BUY", "SELL", or "HOLD" for UAMY and EXK.
+    4. **X.com VIRAL POST**: Write a short, punchy tweet I can copy-paste to X.com. It must sound like a professional trader. Use $CASH_TAGS.
+
+    Output format: Clean text with emojis. No markdown code blocks.
     """
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt
-    )
-    return response.text
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        return response.text
+    except Exception as e:
+        return f"❌ AI Analysis Failed: {e}"
 
-# --- MODULE 4: TELEGRAM SENDER ---
+# --- 4. TELEGRAM SENDER ---
 async def send_telegram(message):
-    bot = Bot(token=TELEGRAM_TOKEN)
-    # Telegram has a char limit, Gemini can be verbose. We split if needed.
-    if len(message) > 4000:
-        await bot.send_message(chat_id=CHAT_ID, text=message[:4000])
-        await bot.send_message(chat_id=CHAT_ID, text=message[4000:])
-    else:
-        await bot.send_message(chat_id=CHAT_ID, text=message)
+    try:
+        bot = Bot(token=TELEGRAM_TOKEN)
+        # Split message if too long (Telegram limit is 4096 chars)
+        if len(message) > 4000:
+            await bot.send_message(chat_id=CHAT_ID, text=message[:4000])
+            await bot.send_message(chat_id=CHAT_ID, text=message[4000:])
+        else:
+            await bot.send_message(chat_id=CHAT_ID, text=message)
+    except Exception as e:
+        print(f"Telegram Error: {e}")
 
-# --- MAIN LOOP ---
+# --- 5. MAIN EXECUTION LOOP ---
 def job():
-    print("⏳ Starting scan cycle...")
-    data = get_data()
-    analysis = ask_gemini(data)
+    print("⏳ Starting Hourly Scan...")
     
-    final_msg = f"🤖 **GEMINI AGENT REPORT** 🤖\n{analysis}"
+    # Step 1: Get Data
+    raw_data = get_market_snapshot()
     
-    asyncio.run(send_telegram(final_msg))
-    print("✅ Report sent.")
+    # Step 2: Analyze
+    ai_report = analyze_with_gemini(raw_data)
+    
+    # Step 3: Send
+    final_message = f"{ai_report}\n\n" + "="*20 + f"\n🔍 [Check X.com for $UAMY](https://x.com/search?q=%24UAMY&src=typed_query&f=live)"
+    
+    asyncio.run(send_telegram(final_message))
+    print("✅ Hourly Report Sent!")
 
-# Schedule: Run every 1 hour
-schedule.every(1).hours.do(job)
-
-# Run once immediately on start to test
-job()
-
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+# --- SCHEDULER ---
+if __name__ == "__main__":
+    # Run once immediately to confirm it works
+    job()
+    
+    # Schedule every 1 hour
+    schedule.every(1).hours.do(job)
+    
+    print("🤖 Agent is running in background. Waiting for next hour...")
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
