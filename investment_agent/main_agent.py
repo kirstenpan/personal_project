@@ -25,7 +25,12 @@ def get_market_intelligence():
 def send_to_telegram(text):
     token = os.getenv("TELEGRAM_TOKEN")
     chat_id = os.getenv("CHAT_ID")
-    requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
-                  data={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"})
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    response = requests.post(url, data=payload)
+    
+    # Visible Debugging for GitHub Logs
+    print(f"Telegram Status: {response.status_code}")
+    print(f"Telegram Response: {response.text}")
 
 get_market_intelligence()
