@@ -11,11 +11,12 @@ def get_market_intelligence():
     doe_funding_status = "Pending $44M Application" # [5, 6]
     
     analysis_prompt = f"""
-    你是纽约27岁助教。分析以下数据：
+    Analyze the following data：
     1. 上海银价溢价: ${shanghai_premium} (当前西方正在挤兑实物) 
     2. UAMY 状态: {doe_funding_status} [5]
+    3. EXK, MTA and AG status
     3. MTA 挂单目标: $8.10 [Image 16]
-    请给我手机用户发一段简短、狠辣的投资指令。
+    Please send a sharp and highly professional investment instruction to mobile phone users with all your webscrapping information.
     """
     
     response = model.generate_content(analysis_prompt)
