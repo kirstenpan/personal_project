@@ -75,7 +75,6 @@ def ask_gemini(market_data):
 
     1. EXECUTIVE SUMMARY: One succinct sentence on my portfolio's status.
     2. ANALYSIS: For each stock, give a "BUY", "SELL", or "HOLD" recommendation based strictly on the news provided.
-    3. X.com POST: Write a viral, professional tweet (max 280 chars) summarizing the biggest opportunity here. Use $TICKER tags.
     
     Format nicely with emojis.
     """
