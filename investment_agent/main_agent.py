@@ -1,17 +1,40 @@
-import os, telebot, google.generativeai as genai
+import os, requests, google.generativeai as genai
 
-# Setup
-bot = telebot.TeleBot(os.getenv("TELEGRAM_TOKEN"))
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-2.0-flash')
 
-@bot.message_handler(func=lambda m: True)
-def chat_with_agent(message):
-    context = (
-        "You are a high-end investment analysis assistant for a 26-year-old NYC-based investor. Continuously monitor UAMY, EXK, AG, ELE, and MTA using live web-scraped market data and news. Provide most professional, data-driven analysis including: Real-time price movements and volume. Technical indicators and trend analysis. Relevant real-time news, macro, and sector developments. Risk factors and short-term vs long-term implications. Proactively alert me to significant price movements, volatility spikes, trend reversals, or material news events, and clearly explain the investment impact in precise."
-    )
+def get_market_intelligence():
+    # 模拟 Web Scrapping 监控点
+    # 监控 1: 上海银价溢价 (Shanghai Premium)
+    shanghai_premium = 17.5 # 目前约为 $14-$17 [3, 4]
+    # 监控 2: UAMY 政策进展
+    doe_funding_status = "Pending $44M Application" # [5, 6]
     
-    response = model.generate_content(f"{context}\n\nUser asked: {message.text}")
-    bot.reply_to(message, response.text)
+    analysis_prompt = f"""
+    Analyze the following data：
+    1. 上海银价溢价: ${shanghai_premium} (当前西方正在挤兑实物) 
+    2. UAMY 状态: {doe_funding_status} [5]
+    3. EXK, MTA and AG status
+    3. MTA 挂单目标: $8.10 [Image 16]
+    Please send a sharp and highly professional investment instruction to mobile phone users with all your webscrapping information.
+    """
+    
+    response = model.generate_content(analysis_prompt)
+    send_to_telegram(response.text)
 
-bot.infinity_polling()
+def send_to_telegram(text):
+    token = os.getenv("TELEGRAM_TOKEN")
+    chat_id = os.getenv("CHAT_ID")
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
+    payload = {
+        "chat_id": chat_id, 
+        "text": text, 
+        "parse_mode": "HTML" 
+    }
+    
+    response = requests.post(url, data=payload)
+    print(f"Telegram Status: {response.status_code}")
+    print(f"Telegram Response: {response.text}")
+
+get_market_intelligence()
