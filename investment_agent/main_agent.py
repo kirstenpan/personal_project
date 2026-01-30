@@ -9,11 +9,12 @@ from telegram import Bot
 from google import genai
 
 # ==========================================
-# ⚙️ CONFIGURATION (FILL THIS IN)
+# ⚙️ CONFIGURATION
 # ==========================================
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
+# 👇 CRITICAL FIX: Read keys from GitHub Secrets (Environment Variables)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 # Your Specific Holdings
 PORTFOLIO = {
@@ -29,7 +30,6 @@ PORTFOLIO = {
 def get_news_and_social(ticker):
     """
     Scrapes Google News RSS for real-time headlines.
-    Also generates a link to see live X.com conversation.
     """
     # 1. Google News RSS (Fast & Free)
     search_query = f"{ticker} stock news"
@@ -63,9 +63,16 @@ def get_market_snapshot():
         try:
             # Fetch Live Data
             stock = yf.Ticker(ticker)
-            price = stock.fast_info['last_price']
-            prev_close = stock.fast_info['previous_close']
-            
+            # Handle potential missing data safely
+            try:
+                price = stock.fast_info['last_price']
+                prev_close = stock.fast_info['previous_close']
+            except:
+                # Fallback if fast_info fails
+                hist = stock.history(period="1d")
+                price = hist['Close'].iloc[-1]
+                prev_close = hist['Open'].iloc[-1]
+
             # Math
             change_pct = ((price - prev_close) / prev_close) * 100
             position_value = price * shares
@@ -100,6 +107,9 @@ def get_market_snapshot():
 
 # --- 3. GEMINI 2.0 ANALYST BRAIN ---
 def analyze_with_gemini(market_data):
+    if not GEMINI_API_KEY:
+        return "❌ Error: GEMINI_API_KEY not found in secrets."
+
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     prompt = f"""
@@ -128,6 +138,10 @@ def analyze_with_gemini(market_data):
 
 # --- 4. TELEGRAM SENDER ---
 async def send_telegram(message):
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("❌ Error: Telegram keys not found.")
+        return
+
     try:
         bot = Bot(token=TELEGRAM_TOKEN)
         # Split message if too long (Telegram limit is 4096 chars)
@@ -157,13 +171,5 @@ def job():
 
 # --- SCHEDULER ---
 if __name__ == "__main__":
-    # Run once immediately to confirm it works
+    # GitHub Actions handles the scheduling for us.
     job()
-    
-    # Schedule every 1 hour
-    schedule.every(1).hours.do(job)
-    
-    print("🤖 Agent is running in background. Waiting for next hour...")
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
