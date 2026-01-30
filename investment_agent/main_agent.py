@@ -43,7 +43,7 @@ def get_real_news(ticker):
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, features="xml")
+        soup = BeautifulSoup(response.content, features="html.parser")
         items = soup.findAll('item')[:3] # Top 3 stories
         
         summary = ""
