@@ -24,8 +24,8 @@ PORTFOLIO_CONFIG = [
     # EXK: $10,000 bought at $8.84
     {'ticker': 'EXK', 'shares': 10000 / 8.84, 'buy_price': 8.84},
     
-    # MTA: $5,000 bought at $105.29 (⚠️ Note: High buy price for MTA, check if typo)
-    {'ticker': 'MTA', 'shares': 5000 / 105.29, 'buy_price': 105.29},
+    # MTA: $5,000 bought at $8.13
+    {'ticker': 'MTA', 'shares': 5000 / 8.13, 'buy_price': 8.13},
     
     # UPS: $5,000 bought at $105.29
     {'ticker': 'UPS', 'shares': 5000 / 105.29, 'buy_price': 105.29},
@@ -125,14 +125,14 @@ def analyze_with_gemini(market_data):
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     prompt = f"""
-    You are a Hedge Fund Manager. Here is my Portfolio Performance:
+    You are a super professional Hedge Fund Manager. Here is my Portfolio Performance:
     {market_data}
     
     Task:
     1. **STATUS**: 1 sentence on why the portfolio is Up or Down today.
     2. **WINNER/LOSER**: Highlight my best performing stock and my worst.
-    3. **STRATEGY**: Given the news, should I buy more UAMY or sell EXK?
-    4. **X.com POST**: Write a "Trader Style" tweet about the most volatile stock I own. Use $CASH_TAGS.
+    3. **ANALYSIS**: Analyze the latest professionally, web scrapping most up-to-date news from today. Explain the stock price movement and risk.
+    4. **STRATEGY**: tell me what do I need to do, give me the best, most professional strategy!
     """
     
     try:
