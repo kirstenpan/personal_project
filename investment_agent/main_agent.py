@@ -111,9 +111,10 @@ def analyze_with_gemini(data_block):
     
     client = genai.Client(api_key=GEMINI_API_KEY)
     
+    # 👇 FIXED: Changed {market_data} to {data_block} to match the function input
     prompt = f"""
     You are a super professional Hedge Fund Manager. Here is my Portfolio Performance:
-    {market_data}
+    {data_block}
     
     Task:
     1. **STATUS**: 1 sentence on why the portfolio is Up or Down in % today, calculate the current total net worth based on live stock price, inintial total net worth $45,000.
