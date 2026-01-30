@@ -11,165 +11,154 @@ from google import genai
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-# 👇 CRITICAL FIX: Read keys from GitHub Secrets (Environment Variables)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Your Specific Holdings
-PORTFOLIO = {
-    'UAMY': 2156,
-    'EXK': 1132,
-    'MTA': 615,
-    'UPS': 47,
-    'ITRG': 1161
-}
+# 👇 UPDATED PORTFOLIO STRUCTURE
+# We calculate shares dynamically based on your "Total Invested / Buy Price"
+PORTFOLIO_CONFIG = [
+    # UAMY: You own 2156 shares (Buy price unknown, set to 0 to track Total Value only)
+    {'ticker': 'UAMY', 'shares': 2156.0, 'buy_price': 0.0},
+    
+    # EXK: $10,000 bought at $8.84
+    {'ticker': 'EXK', 'shares': 10000 / 8.84, 'buy_price': 8.84},
+    
+    # MTA: $5,000 bought at $105.29 (⚠️ Note: High buy price for MTA, check if typo)
+    {'ticker': 'MTA', 'shares': 5000 / 105.29, 'buy_price': 105.29},
+    
+    # UPS: $5,000 bought at $105.29
+    {'ticker': 'UPS', 'shares': 5000 / 105.29, 'buy_price': 105.29},
+    
+    # ITRG: $5,000 bought at $4.31
+    {'ticker': 'ITRG', 'shares': 5000 / 4.31, 'buy_price': 4.31}
+]
+
 # ==========================================
 
-# --- 1. INTELLIGENT NEWS SCRAPER ---
 def get_news_and_social(ticker):
-    """
-    Scrapes Google News RSS for real-time headlines.
-    """
-    # 1. Google News RSS (Fast & Free)
+    """Scrapes Google News RSS for real-time headlines."""
     search_query = f"{ticker} stock news"
-    if ticker == 'MTA': search_query = "Metalla Royalty news" # Fix for MTA subway confusion
+    if ticker == 'MTA': search_query = "Metalla Royalty news"
     
     url = f"https://news.google.com/rss/search?q={search_query}&hl=en-US&gl=US&ceid=US:en"
-    
     news_summary = ""
     try:
         response = requests.get(url, timeout=5)
         soup = BeautifulSoup(response.content, features="xml")
-        items = soup.findAll('item')[:3] # Get top 3 latest stories
-        
-        if not items:
-            news_summary = "• No breaking news in last 24h."
-        else:
-            for item in items:
-                news_summary += f"• {item.title.text} ({item.pubDate.text[:16]})\n"
-    except Exception as e:
-        news_summary = f"• (Error fetching news: {e})"
-
+        items = soup.findAll('item')[:2] # Top 2 stories
+        if not items: return "• No breaking news."
+        for item in items:
+            news_summary += f"• {item.title.text} ({item.pubDate.text[:16]})\n"
+    except:
+        return "• (News unavailable)"
     return news_summary
 
-# --- 2. LIVE MARKET DATA ENGINE ---
 def get_market_snapshot():
-    print("🔍 Scanning Market & News...")
+    print("🔍 Scanning Market & Calculating P&L...")
     snapshot = ""
-    total_portfolio_value = 0.0
+    total_equity = 0.0
+    total_cost = 0.0
     
-    for ticker, shares in PORTFOLIO.items():
+    for item in PORTFOLIO_CONFIG:
+        ticker = item['ticker']
+        shares = item['shares']
+        buy_price = item['buy_price']
+        
         try:
-            # Fetch Live Data
+            # 1. Get Live Price
             stock = yf.Ticker(ticker)
-            # Handle potential missing data safely
             try:
-                price = stock.fast_info['last_price']
-                prev_close = stock.fast_info['previous_close']
+                curr_price = stock.fast_info['last_price']
             except:
-                # Fallback if fast_info fails
-                hist = stock.history(period="1d")
-                price = hist['Close'].iloc[-1]
-                prev_close = hist['Open'].iloc[-1]
+                curr_price = stock.history(period="1d")['Close'].iloc[-1]
+            
+            # 2. Calculate Math
+            current_value = shares * curr_price
+            initial_cost = shares * buy_price
+            
+            # Calculate Gain/Loss (if buy_price is known)
+            if buy_price > 0:
+                profit_dollar = current_value - initial_cost
+                profit_pct = ((curr_price - buy_price) / buy_price) * 100
+                total_cost += initial_cost
+                
+                # Emoji Logic
+                if profit_pct > 0: pnl_str = f"🟢 +${profit_dollar:,.0f} (+{profit_pct:.1f}%)"
+                else: pnl_str = f"🔻 -${abs(profit_dollar):,.0f} ({profit_pct:.1f}%)"
+            else:
+                pnl_str = "⚪ (Track Value Only)"
+                # We don't add to total_cost if buy_price is 0 to avoid skewing "Total Performance"
 
-            # Math
-            change_pct = ((price - prev_close) / prev_close) * 100
-            position_value = price * shares
-            total_portfolio_value += position_value
+            total_equity += current_value
             
-            # Trend Emoji
-            if change_pct > 1.0: trend = "🚀"
-            elif change_pct > 0.0: trend = "🟢"
-            elif change_pct < -1.0: trend = "🩸"
-            else: trend = "🔴"
-            
-            # Get News
+            # 3. Get News
             news = get_news_and_social(ticker)
             
-            # Build Report Section
             snapshot += f"""
-{trend} **{ticker}**
-   • Price: ${price:.2f} ({change_pct:+.2f}%)
-   • My Value: ${position_value:,.2f}
-   • News Logic:
+**{ticker}** | ${curr_price:.2f}
+   • Val: ${current_value:,.0f} | Cost: ${buy_price:.2f}
+   • P&L: {pnl_str}
+   • News:
      {news}
 --------------------------------"""
         except Exception as e:
-            print(f"⚠️ Error with {ticker}: {e}")
+            print(f"⚠️ Error {ticker}: {e}")
+            snapshot += f"\n⚠️ {ticker}: Data Error\n"
 
-    # Add Total Summary at the top
-    header = f"💰 **TOTAL PORTFOLIO: ${total_portfolio_value:,.2f}**\n"
-    header += f"📅 Time: {time.strftime('%Y-%m-%d %H:%M EST')}\n"
-    header += "="*30 + "\n"
-    
+    # Total Portfolio Summary
+    total_pnl = total_equity - total_cost
+    if total_cost > 0:
+        total_pct = (total_pnl / total_cost) * 100
+        header_emoji = "🚀" if total_pnl > 0 else "📉"
+        header = f"{header_emoji} **NET WORTH: ${total_equity:,.0f}**\n"
+        header += f"📊 Total Return: {total_pnl:+,.0f} ({total_pct:+.1f}%)\n"
+    else:
+        header = f"💰 **NET WORTH: ${total_equity:,.0f}**\n"
+        
+    header += f"📅 {time.strftime('%Y-%m-%d %H:%M EST')}\n" + "="*30 + "\n"
     return header + snapshot
 
-# --- 3. GEMINI 2.0 ANALYST BRAIN ---
 def analyze_with_gemini(market_data):
-    if not GEMINI_API_KEY:
-        return "❌ Error: GEMINI_API_KEY not found in secrets."
-
+    if not GEMINI_API_KEY: return "❌ Key Missing"
+    
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     prompt = f"""
-    You are an elite Wall Street Hedge Fund Manager (Aggressive/Contrarian Style).
-    I own these stocks. Here is the LIVE data and News:
-    
+    You are a Hedge Fund Manager. Here is my Portfolio Performance:
     {market_data}
     
-    Your Job:
-    1. **TOTAL HEALTH**: One sentence on my total equity status.
-    2. **DEEP DIVE**: Pick the most volatile stock right now. Explain WHY it is moving based on the news provided.
-    3. **ACTION PLAN**: Give me a specific "BUY", "SELL", or "HOLD" for UAMY and EXK.
-    4. **X.com VIRAL POST**: Write a short, punchy tweet I can copy-paste to X.com. It must sound like a professional trader. Use $CASH_TAGS.
-
-    Output format: Clean text with emojis. No markdown code blocks.
+    Task:
+    1. **STATUS**: 1 sentence on why the portfolio is Up or Down today.
+    2. **WINNER/LOSER**: Highlight my best performing stock and my worst.
+    3. **STRATEGY**: Given the news, should I buy more UAMY or sell EXK?
+    4. **X.com POST**: Write a "Trader Style" tweet about the most volatile stock I own. Use $CASH_TAGS.
     """
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
+            model="gemini-2.0-flash", contents=prompt
         )
         return response.text
     except Exception as e:
-        return f"❌ AI Analysis Failed: {e}"
+        return f"❌ AI Error: {e}"
 
-# --- 4. TELEGRAM SENDER ---
 async def send_telegram(message):
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("❌ Error: Telegram keys not found.")
-        return
-
+    if not TELEGRAM_TOKEN or not CHAT_ID: return
     try:
         bot = Bot(token=TELEGRAM_TOKEN)
-        # Split message if too long (Telegram limit is 4096 chars)
         if len(message) > 4000:
             await bot.send_message(chat_id=CHAT_ID, text=message[:4000])
             await bot.send_message(chat_id=CHAT_ID, text=message[4000:])
         else:
             await bot.send_message(chat_id=CHAT_ID, text=message)
     except Exception as e:
-        print(f"Telegram Error: {e}")
+        print(f"Telegram Fail: {e}")
 
-# --- 5. MAIN EXECUTION LOOP ---
 def job():
-    print("⏳ Starting Hourly Scan...")
-    
-    # Step 1: Get Data
-    raw_data = get_market_snapshot()
-    
-    # Step 2: Analyze
-    ai_report = analyze_with_gemini(raw_data)
-    
-    # Step 3: Send
-    final_message = f"{ai_report}\n\n" + "="*20 + f"\n🔍 [Check X.com for $UAMY](https://x.com/search?q=%24UAMY&src=typed_query&f=live)"
-    
-    asyncio.run(send_telegram(final_message))
-    print("✅ Hourly Report Sent!")
+    data = get_market_snapshot()
+    report = analyze_with_gemini(data)
+    asyncio.run(send_telegram(f"{report}\n\n" + "="*20 + "\n" + data))
 
-# --- SCHEDULER ---
 if __name__ == "__main__":
-    # GitHub Actions handles the scheduling for us.
     job()
