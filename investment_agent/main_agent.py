@@ -1,13 +1,12 @@
 import os
 import asyncio
-import schedule
 import time
 import requests
 import yfinance as yf
 from bs4 import BeautifulSoup
 from telegram import Bot
 from google import genai
-from google.genai import types
+from datetime import datetime, timezone, timedelta
 
 # ==========================================
 # ⚙️ CONFIGURATION
@@ -16,50 +15,60 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# YOUR HOLDINGS
 PORTFOLIO_CONFIG = [
-    {'ticker': 'UAMY', 'shares': 2156.0, 'buy_price': 0.0},
-    {'ticker': 'EXK', 'shares': 10000 / 8.84, 'buy_price': 8.84},
-    {'ticker': 'MTA', 'shares': 5000 / 8.13, 'buy_price': 8.13},
-    {'ticker': 'UPS', 'shares': 5000 / 105.29, 'buy_price': 105.29},
-    {'ticker': 'ITRG', 'shares': 5000 / 4.31, 'buy_price': 4.31}
+    {'ticker': 'UAMY', 'shares': 2156.0, 'buy_price': 9.28},
+    {'ticker': 'EXK', 'shares': 1131.0, 'buy_price': 8.84},
+    {'ticker': 'MTA', 'shares': 614.0, 'buy_price': 8.13},
+    {'ticker': 'UPS', 'shares': 47.0, 'buy_price': 105.29},
+    {'ticker': 'ITRG', 'shares': 1160.0, 'buy_price': 4.31}
 ]
 
 # ==========================================
 
 def get_real_news(ticker):
     """
-    Fetches news using a 'Fake Browser' header to bypass Google blocking.
+    Robust Scraper: Uses 'html.parser' to avoid XML errors.
     """
     search_query = f"{ticker} stock news"
     if ticker == 'MTA': search_query = "Metalla Royalty Mining news"
     
     url = f"https://news.google.com/rss/search?q={search_query}&hl=en-US&gl=US&ceid=US:en"
     
-    # 👇 CRITICAL FIX: "User-Agent" makes us look like a real Chrome browser
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36"
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.content, features="html.parser")
-        items = soup.findAll('item')[:3] # Top 3 stories
+        items = soup.find_all('item')[:3]
         
         summary = ""
         if not items:
-            return "No recent news found on RSS."
+            return "• No recent news found."
             
         for item in items:
-            title = item.title.text
-            date = item.pubDate.text[:16] # Shorten date
-            summary += f"- {title} ({date})\n"
+            title_tag = item.find('title')
+            date_tag = item.find('pubdate')
+            
+            title = title_tag.get_text() if title_tag else "No Title"
+            date = date_tag.get_text()[:16] if date_tag else ""
+            
+            summary += f"• {title} ({date})\n"
         return summary
     except Exception as e:
-        return f"News Error: {e}"
+        return f"• (News Error: {e})"
 
 def get_market_data():
-    print("🔍 Fetching Live Data & News...")
+    print("🔍 Fetching Data...")
+    
+    # Check Market Status (EST Time)
+    est_offset = timezone(timedelta(hours=-5))
+    now = datetime.now(est_offset)
+    is_open = (now.weekday() < 5) and (9 <= now.hour < 16)
+    status_emoji = "🟢" if is_open else "zzz"
+    status_text = "MARKET OPEN" if is_open else "MARKET CLOSED"
+    
     report_text = ""
     total_equity = 0.0
     
@@ -69,40 +78,38 @@ def get_market_data():
         buy_price = item['buy_price']
         
         try:
-            # 1. Get Price
             stock = yf.Ticker(ticker)
-            # Try fast info, fallback to history
             try:
                 curr_price = stock.fast_info['last_price']
             except:
                 curr_price = stock.history(period="1d")['Close'].iloc[-1]
             
-            # 2. Calculate P&L
+            if curr_price is None: curr_price = 0.0
+
             val = shares * curr_price
             total_equity += val
             
             pnl_text = ""
-            if buy_price > 0:
+            if buy_price > 0 and curr_price > 0:
                 pnl_amt = val - (shares * buy_price)
                 pnl_pct = (pnl_amt / (shares * buy_price)) * 100
                 emoji = "🟢" if pnl_amt > 0 else "🔻"
                 pnl_text = f"P&L: {emoji} ${pnl_amt:,.0f} ({pnl_pct:+.1f}%)"
             
-            # 3. Get News
             news_text = get_real_news(ticker)
             
             report_text += f"""
 💎 **{ticker}** | ${curr_price:.2f}
 {pnl_text}
 Value: ${val:,.0f}
-NEWS CONTEXT:
+NEWS:
 {news_text}
 --------------------------------"""
         except Exception as e:
             print(f"⚠️ Error {ticker}: {e}")
 
     header = f"💰 **LIVE PORTFOLIO: ${total_equity:,.0f}**\n"
-    header += f"📅 {time.strftime('%Y-%m-%d %H:%M EST')}\n"
+    header += f"📅 {now.strftime('%Y-%m-%d %H:%M EST')} | {status_emoji} {status_text}\n"
     header += "="*30
     return header + report_text
 
@@ -111,9 +118,9 @@ def analyze_with_gemini(data_block):
     
     client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 👇 FIXED: Changed {market_data} to {data_block} to match the function input
+    # 👇 YOUR EXACT PROMPT (No Changes)
     prompt = f"""
-    You are a super professional Hedge Fund Manager. Here is my Portfolio Performance:
+    You are a super professional Hedge Fund Manager. Here is my Portfolio Performance (do not tell me any disclaimer because I know already):
     {data_block}
     
     Task:
@@ -124,7 +131,6 @@ def analyze_with_gemini(data_block):
     """
     
     try:
-        # Use Google Search Grounding for extra freshness (If supported by your key)
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt
