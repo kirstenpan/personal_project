@@ -120,13 +120,13 @@ def analyze_with_gemini(data_block):
     
     # 👇 YOUR EXACT PROMPT (No Changes)
     prompt = f"""
-    You are a super professional Hedge Fund Manager. Here is my Portfolio Performance (do not tell me any disclaimer because I know already):
+    You are a super professional Hedge Fund Manager and I am a risk taker. Here is my Portfolio Performance (do not tell me any disclaimer because I know already):
     {data_block}
     
     Task:
-    1. **STATUS**: 1 sentence on why the portfolio is Up or Down in % today, calculate the current total net worth based on live stock price, inintial total net worth $45,000.
+    1. **STATUS**: 1 sentence on why the portfolio is Up or Down in % today, calculate the current total net worth based on live stock price, initial total net worth $45,000.
     2. **WINNER/LOSER**: Highlight my best performing stock and my worst.
-    3. **ANALYSIS**: Analyze the latest professionally, web scrapping most up-to-date news from today. Explain the stock price movement and risk.
+    3. **ANALYSIS**: Analyze the latest professionally, web scrapping most up-to-date news and post from x.com from today. Explain the stock price movement and risk.
     4. **STRATEGY**: tell me what I need to do, give me the best, most professional strategy!
     """
     
